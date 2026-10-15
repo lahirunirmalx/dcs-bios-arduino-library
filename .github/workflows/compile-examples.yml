@@ -1,0 +1,86 @@
+name: Compile examples
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'examples/**'
+      - 'library.properties'
+      - '.github/workflows/compile-examples.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'examples/**'
+      - 'library.properties'
+      - '.github/workflows/compile-examples.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: ${{ matrix.board.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board:
+          # Sketches that compile on every AVR target are listed in
+          # COMMON_SKETCHES. Board-specific sketches are appended per entry.
+          - name: uno
+            fqbn: arduino:avr:uno
+            extra-sketches: |
+              - examples/IRQSerial
+          - name: mega2560
+            fqbn: arduino:avr:mega:cpu=atmega2560
+            extra-sketches: |
+              - examples/IRQSerial
+              - examples/RS485Deferred
+              - examples/RS485Master
+          - name: leonardo
+            fqbn: arduino:avr:leonardo
+            # IRQSerial uses USART0 registers that the 32u4 does not have.
+            # RS485Deferred and RS485Master use Mega-only ports/UARTs.
+            extra-sketches: ''
+    env:
+      COMMON_SKETCHES: |
+        - examples/Button_Matrix_Example
+        - examples/DefaultSerial
+        - examples/DualModeTest
+        - examples/DynamicControlMapping
+        - examples/MasterCaution
+        - examples/OneOfEverything
+        - examples/PRESET___FREQ_UHF_RADIO_M2000C
+        - examples/PRESET___FREQ_UVHF_RADIO_M2000C
+        - examples/RS485Slave
+        - examples/RS485SlaveUART
+        - examples/Synchronization
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile examples
+        uses: arduino/compile-sketches@v1
+        with:
+          fqbn: ${{ matrix.board.fqbn }}
+          # Listing any library here replaces the default, so the library
+          # under test must be re-added via source-path.
+          libraries: |
+            - source-path: ./
+            - name: Servo
+            - name: LedControl
+            # Button_Matrix_Example needs SwitchMatrix. Upstream
+            # (dagoston93/SwitchMatrix) includes "arduino.h" in lowercase,
+            # which fails on Linux runners; this fork branch fixes the case
+            # (upstream PR dagoston93/SwitchMatrix#1). Switch back to the
+            # upstream URL once that PR is merged.
+            - source-url: https://github.com/lahirunirmalx/SwitchMatrix.git
+              version: fix/arduino-h-include-case
+          sketch-paths: |
+            ${{ env.COMMON_SKETCHES }}
+            ${{ matrix.board.extra-sketches }}
+          enable-deltas-report: false
+          enable-warnings-report: true
+          verbose: false

@@ -16,6 +16,14 @@ This is a community maintained plugin.  Support is best found at the DCS-Flightp
 
 ## Releasing
 
-1. Bump version number in library.properties
-2. Run make_release, providing the same version number when prompted.
-3. Manually make a zip file of the folder created in /Releases, and upload to github.
+1. Bump `version` in `library.properties` and add a `## v<version>` section to `releasenotes.md`.
+2. Merge to `master`, then push a tag with the same version number, e.g. `git tag 0.3.14 && git push origin 0.3.14`.
+3. The `Release` GitHub workflow checks that the tag matches `library.properties`, builds `dcs-bios-arduino-library-<version>.zip` with `scripts/make_release.sh`, and publishes a GitHub release with that zip and the release notes.
+
+The Arduino Library Manager and the PlatformIO registry pick the new version up from the tag.
+
+To build the zip locally run `scripts/make_release.sh` (Linux/macOS, needs `zip`) or `make_release.ps1` (Windows); both write to `Releases/`.
+
+## Continuous integration
+
+The `Compile examples` workflow compiles the examples with the Arduino CLI on Uno, Mega 2560 and Leonardo on every push and pull request. Examples that only build on a specific board are listed per board in `.github/workflows/compile-examples.yml`.
