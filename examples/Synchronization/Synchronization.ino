@@ -19,6 +19,9 @@ DcsBios::ProtocolParser parser;
 
 unsigned long lastTickMillis;
 
+/* Declared before timerTick() below, which resets this control's remembered state. */
+DcsBios::Switch3Pos ahcpGunpac("AHCP_GUNPAC", 0, 1);
+
 void setup() {  
   DcsBios::setup();
   lastTickMillis = millis();
@@ -46,7 +49,6 @@ void loop() {
   }
 }
 
-DcsBios::Switch3Pos ahcpGunpac("AHCP_GUNPAC", 0, 1);
 
 // This is the recommended approach and the ideal if we can work out all the kinks:
 // If the mission time changes backwards, we have entered a new aircraft; Resync everything
