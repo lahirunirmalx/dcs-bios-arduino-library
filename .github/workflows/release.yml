@@ -1,0 +1,89 @@
+name: Release
+
+# Publishes a GitHub release with the Arduino-importable zip whenever a
+# version tag (e.g. 0.3.14) is pushed. The tag must match the version in
+# library.properties. The Arduino Library Manager and PlatformIO registry
+# index this repository by tag, so nothing else is required.
+#
+# Run the workflow manually (workflow_dispatch) to build the zip as a
+# workflow artifact without creating a release.
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from library.properties
+        id: version
+        run: |
+          version="$(sed -n 's/^version=//p' library.properties | tr -d '\r')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "library.properties version: $version"
+
+      - name: Check tag matches library.properties
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ "$TAG" != "$VERSION" ]]; then
+            echo "::error::tag $TAG does not match library.properties version $VERSION"
+            exit 1
+          fi
+
+      - name: Build release zip
+        run: scripts/make_release.sh "${{ steps.version.outputs.version }}" Releases
+
+      - name: Extract release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Take the "## v<version>" section of releasenotes.md, if present.
+          awk -v v="$VERSION" '
+            $0 == "## v" v { found = 1; next }
+            /^## / { found = 0 }
+            found { print }
+          ' releasenotes.md > "$RUNNER_TEMP/release-notes.md"
+          if [[ -s "$RUNNER_TEMP/release-notes.md" ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::no '## v$VERSION' section in releasenotes.md; using generated notes only"
+          fi
+
+      - name: Upload zip as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcs-bios-arduino-library-${{ steps.version.outputs.version }}
+          path: Releases/dcs-bios-arduino-library-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          HAS_NOTES: ${{ steps.notes.outputs.found }}
+        run: |
+          # gh prepends --notes to the generated notes; --notes-file is not
+          # documented to combine with --generate-notes, so pass the text.
+          args=(--title "$VERSION" --generate-notes --verify-tag)
+          if [[ "$HAS_NOTES" == "true" ]]; then
+            args+=(--notes "$(cat "$RUNNER_TEMP/release-notes.md")")
+          fi
+          gh release create "$TAG" "${args[@]}" \
+            "Releases/dcs-bios-arduino-library-$VERSION.zip#dcs-bios-arduino-library-$VERSION.zip"
